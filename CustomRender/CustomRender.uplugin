@@ -1,0 +1,23 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "CustomRender",
+	"Description": "Custom rendering for Deep learning and AI tasks.",
+	"Category": "Rendering",
+	"CreatedBy": "Ibraheem Alhashim",
+	"CreatedByURL": "",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": false,
+	"IsBetaVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "CustomRender",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		}
+	]
+}
