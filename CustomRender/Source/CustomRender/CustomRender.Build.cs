@@ -28,7 +28,7 @@ public class CustomRender : ModuleRules
 		PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"Core",
+                "Core", "CoreUObject", "Engine", "InputCore",
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
@@ -37,22 +37,22 @@ public class CustomRender : ModuleRules
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
             {
-                "Projects",
-                "InputCore",
-                "UnrealEd",
-                "LevelEditor",
-                "CoreUObject",
                 "Engine",
+                "UnrealEd",
+                "CoreUObject",
+                "InputCore",
                 "Slate",
                 "SlateCore",
+                "Projects",
+                "LevelEditor",
+                "PropertyEditor",
                 "Sequencer",
                 "LevelSequence",
                 "LevelSequenceEditor",
+                "Sequencer",
                 "MovieScene",
                 "MovieSceneTools",
                 "MovieSceneTracks",
-                "PropertyEditor",
-                "Sequencer",
                 "CinematicCamera"
 				// ... add private dependencies that you statically link with here ...	
 			}
