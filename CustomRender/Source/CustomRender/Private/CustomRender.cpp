@@ -8,7 +8,7 @@
 
 #include "LevelEditor.h"
 
-SWindow * pwindow;
+SWindow * pwindow = nullptr;
 
 static const FName CustomRenderTabName("CustomRender");
 
@@ -78,6 +78,10 @@ void FCustomRenderModule::AddToolbarExtension(FToolBarBuilder& Builder)
 #include <algorithm>
 #include <EngineUtils.h>
 #include <Editor.h>
+#include <ObjectTools.h>
+#include <AssetDeleteModel.h>
+
+#include <Runtime/AssetRegistry/Public/AssetRegistryModule.h>
 #include <Runtime/Slate/Public/Framework/Application/SlateApplication.h>
 #include <Runtime/Slate/Public/Widgets/Layout/SScrollBox.h>
 #include <Runtime/Engine/Classes/Engine/Selection.h>
@@ -87,12 +91,13 @@ void FCustomRenderModule::AddToolbarExtension(FToolBarBuilder& Builder)
 #include <Runtime/LevelSequence/Public/LevelSequence.h>
 #include <Widgets/Input/SSpinBox.h>
 #include <Widgets/Input/SButton.h>
-#include "Widgets/Input/SCheckBox.h"
+#include <Widgets/Input/SCheckBox.h>
 
 #include <Developer/AssetTools/Public/IAssetTools.h>
 #include <Developer/AssetTools/Public/AssetToolsModule.h>
 #include <Private/LevelSequenceEditorToolkit.h>
 #include <Editor/Sequencer/Public/ISequencer.h>
+#include <Editor/UnrealEd/Public/LevelEditorViewport.h>
 #include <Tracks/MovieSceneCameraCutTrack.h>
 #include <Runtime/MovieScene/Public/MovieScene.h>
 #include <Runtime/MovieScene/Public/MovieSceneSection.h>
@@ -160,7 +165,13 @@ void FCustomRenderModule::PluginButtonClicked()
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(STextBlock).Text(FText::FromString("Lookat Height Adjust:"))]
-		+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SSpinBox<float>).Tag("LookatHeightAdjust").MinValue(0.0f).MaxValue(5.0f).Value(0.5f)]
+			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SSpinBox<float>).Tag("LookatHeightAdjust").MinValue(0.0f).MaxValue(5.0f).Value(0.5f)]
+		]
+		+ SScrollBox::Slot().Padding(5)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(STextBlock).Text(FText::FromString("FPS:"))]
+			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SSpinBox<float>).Tag("FPS").MinValue(1.0f).MaxValue(512.0f).Value(30.0f)]
 		]
 		+ SScrollBox::Slot().Padding(10)
 		[
@@ -189,11 +200,13 @@ void FCustomRenderModule::PluginButtonClicked()
 		]
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().Padding(5).FillWidth(0.1f).HAlign(HAlign_Center)[SNew(STextBlock).Text(FText::FromString(" "))]
-			+ SHorizontalBox::Slot().Padding(5).FillWidth(0.3f).HAlign(HAlign_Center)[SNew(STextBlock).Text(FText::FromString("Object"))]
-			+ SHorizontalBox::Slot().Padding(5).FillWidth(0.2f).HAlign(HAlign_Center)[SNew(STextBlock).Text(FText::FromString("CH"))]
-			+ SHorizontalBox::Slot().Padding(5).FillWidth(0.2f).HAlign(HAlign_Center)[SNew(STextBlock).Text(FText::FromString("R"))]
-			+ SHorizontalBox::Slot().Padding(5).FillWidth(0.2f).HAlign(HAlign_Center)[SNew(STextBlock).Text(FText::FromString("LH"))]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f).HAlign(HAlign_Center)[SNew(STextBlock).Text(FText::FromString(" "))]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.4f).HAlign(HAlign_Center)[SNew(STextBlock).Text(FText::FromString("Object"))]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f).HAlign(HAlign_Center)[SNew(STextBlock).Text(FText::FromString("CH"))]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f).HAlign(HAlign_Center)[SNew(STextBlock).Text(FText::FromString("R"))]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f).HAlign(HAlign_Center)[SNew(STextBlock).Text(FText::FromString("LH"))]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f).HAlign(HAlign_Center)[SNew(STextBlock).Text(FText::FromString("SA"))]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f).HAlign(HAlign_Center)[SNew(STextBlock).Text(FText::FromString("EA"))]
 		]
 	];
 
@@ -206,22 +219,26 @@ void FCustomRenderModule::PluginButtonClicked()
 		auto actorCH = FString(actorLabelString + "-CH");
 		auto actorR = FString(actorLabelString + "-R");
 		auto actorLH = FString(actorLabelString + "-LH");
+		auto actorSA = FString(actorLabelString + "-SA");
+		auto actorEA = FString(actorLabelString + "-EA");
 		
 		ParentBox->AddSlot().AutoHeight()
 		[
 			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().Padding(5).FillWidth(0.1f)[SNew(SCheckBox).Tag(FName(*actorCheck))]
-			+ SHorizontalBox::Slot().Padding(5).FillWidth(0.3f)[SNew(STextBlock).Text(actorLabelText)]
-			+ SHorizontalBox::Slot().Padding(5).FillWidth(0.2f)[SNew(SSpinBox<float>).Tag(FName(*actorCH)).Value(150.0f).MinValue(-200).MaxValue(200)]
-			+ SHorizontalBox::Slot().Padding(5).FillWidth(0.2f)[SNew(SSpinBox<float>).Tag(FName(*actorR)).Value(3.0f).MinValue(-200).MaxValue(200)]
-			+ SHorizontalBox::Slot().Padding(5).FillWidth(0.2f)[SNew(SSpinBox<float>).Tag(FName(*actorLH)).Value(0.5f).MinValue(-200).MaxValue(200)]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SCheckBox).Tag(FName(*actorCheck))]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.4f)[SNew(STextBlock).Text(actorLabelText)]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorCH)).Value(150.0f).MinValue(-200).MaxValue(200)]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorR)).Value(3.0f).MinValue(-200).MaxValue(200)]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorLH)).Value(0.5f).MinValue(-200).MaxValue(200)]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorSA)).Value(0.0f).MinValue(-360.0f).MaxValue(720)]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorEA)).Value(360.0f).MinValue(-360.0f).MaxValue(720)]
 		];
 	}
 
 	// Settings window:
 	auto Window = SNew(SWindow)
 		.Title(FText::FromString(TEXT("Custom Render")))
-		.ClientSize(FVector2D(400, 500))
+		.ClientSize(FVector2D(450, 520))
 		.SupportsMaximize(true)
 		.SupportsMinimize(false)
 		.Content()[ParentBox];
@@ -232,6 +249,8 @@ void FCustomRenderModule::PluginButtonClicked()
 
 void FCustomRenderModule::CreateSequence()
 {
+	auto world = GEditor->GetEditorWorldContext().World();
+
 	std::vector<TSharedRef<SWidget>> childwidgets;
 	allChildWidgets(childwidgets, pwindow->GetChildren()->GetChildAt(0));
 
@@ -260,16 +279,46 @@ void FCustomRenderModule::CreateSequence()
 		FMessageDialog::Open(EAppMsgType::Ok, FText::FromString(FString(log.c_str())));
 	}
 
+	auto CleanupPreviousSequence = [=]() {
+		auto selectedActors = getSelectedActors();
+
+		TArray<UObject *> objects;
+
+		// Clean up past sequences
+		{
+			FAssetRegistryModule& AssetRegistryModule = FModuleManager::GetModuleChecked<FAssetRegistryModule>("AssetRegistry");
+			FAssetData asset = AssetRegistryModule.Get().GetAssetByObjectPath(UTF8_TO_TCHAR("/Game/Cinematics/Sequences/Master"), true);
+			if (asset.IsValid()) {
+				objects.Add(asset.GetAsset());
+			}
+		}
+
+		ObjectTools::ForceDeleteObjects(objects, false);
+
+		// Clean up past cameras
+		for (auto actor : selectedActors)
+		{
+			auto actorLabel = actor->GetActorLabel();
+			auto cameraLabel = actorLabel + "_cam";
+
+			for (TActorIterator<ACineCameraActor> ActorItr(world); ActorItr; ++ActorItr) {
+				if (ActorItr->GetActorLabel().Equals(cameraLabel)){
+					world->DestroyActor(*ActorItr);
+				}
+			}
+		}
+
+		return objects.Num() > 0;
+	};
+
 	auto CreateSequence = [=](std::map<std::string,float> & settings) {
 		std::vector<ACineCameraActor*> allcams;
 		std::vector<FVector> origins, boxes;
 		std::vector<std::string> names;
 
-		auto world = GEditor->GetEditorWorldContext().World();
-
 		// Get the set of selected objects
 		auto selectedActors = getSelectedActors();
-
+		
 		// Generate a camera for each object in the selection
 		for (auto actor : selectedActors)
 		{
@@ -322,28 +371,27 @@ void FCustomRenderModule::CreateSequence()
 		}
 
 		// Create a master sequence
-		auto CreateMasterSequence = []() {
-			FString MasterSequenceAssetName = TEXT("Sequence");
+		auto CreateMasterSequence = [=]() {
+			FString MasterSequenceAssetName = TEXT("Master");
 			FString MasterSequencePackagePath = TEXT("/Game/Cinematics/Sequences");
-			MasterSequencePackagePath /= MasterSequenceAssetName;
-			MasterSequenceAssetName += TEXT("Master");
-			auto CreateLevelSequenceAsset = [](auto AssetName, auto PackagePath) {
-				IAssetTools& AssetTools = FModuleManager::GetModuleChecked<FAssetToolsModule>("AssetTools").Get();
-				UObject* NewAsset = nullptr;
-				for (TObjectIterator<UClass> It; It; ++It) {
-					UClass* CurrentClass = *It;
-					if (CurrentClass->IsChildOf(UFactory::StaticClass()) && !(CurrentClass->HasAnyClassFlags(CLASS_Abstract))) {
-						UFactory* Factory = Cast<UFactory>(CurrentClass->GetDefaultObject());
-						if (Factory->CanCreateNew() && Factory->ImportPriority >= 0 && Factory->SupportedClass == ULevelSequence::StaticClass()) {
-							NewAsset = AssetTools.CreateAsset(AssetName, PackagePath, ULevelSequence::StaticClass(), Factory);
-							break;
-						}
+
+			auto AssetName = MasterSequenceAssetName;
+			auto PackagePath = MasterSequencePackagePath;
+
+			IAssetTools& AssetTools = FModuleManager::GetModuleChecked<FAssetToolsModule>("AssetTools").Get();
+			UObject* NewAsset = nullptr;
+			for (TObjectIterator<UClass> It; It; ++It) {
+				UClass* CurrentClass = *It;
+				if (CurrentClass->IsChildOf(UFactory::StaticClass()) && !(CurrentClass->HasAnyClassFlags(CLASS_Abstract))) {
+					UFactory* Factory = Cast<UFactory>(CurrentClass->GetDefaultObject());
+					if (Factory->CanCreateNew() && Factory->ImportPriority >= 0 && Factory->SupportedClass == ULevelSequence::StaticClass()) {
+						NewAsset = AssetTools.CreateAsset(AssetName, PackagePath, ULevelSequence::StaticClass(), Factory);
+						break;
 					}
 				}
-				return NewAsset;
-			};
+			}
 
-			return CreateLevelSequenceAsset(MasterSequenceAssetName, MasterSequencePackagePath);
+			return NewAsset;
 		};
 
 		// Create master sequence
@@ -382,15 +430,20 @@ void FCustomRenderModule::CreateSequence()
 			FGuid CameraGuid = scene->AddPossessable(camera->GetActorLabel(), camera->GetClass());
 			seq->BindPossessableObject(CameraGuid, *camera, camera->GetWorld());
 
-			// Create camera cut track
+			// Bleed into start and end to avoid jarring frames at start or end
+			float delta = 1.0, deltaStart = 0, deltaEnd = 0;
+			if (i == 0) deltaStart = -delta;
+			else if (i == allcams.size() - 1) deltaEnd = delta;
+
+			// Create camera cut section
 			CameraCutTrack->Modify();
 			auto CamCutNewSection = Cast<UMovieSceneCameraCutSection>(CameraCutTrack->CreateNewSection());
-			CamCutNewSection->SetStartTime(startTime);
-			CamCutNewSection->SetEndTime(startTime + deltaTime);
+			CamCutNewSection->SetStartTime(startTime + deltaStart);
+			CamCutNewSection->SetEndTime(startTime + deltaTime + deltaEnd);
 			CamCutNewSection->SetCameraGuid(CameraGuid);
 			CameraCutTrack->AddSection(*CamCutNewSection);
 
-			// Create camera motion track
+			// Create camera motion section
 			auto CamMoveTrack = scene->AddTrack(UMovieScene3DTransformTrack::StaticClass(), CameraGuid);
 			auto CamMoveSection = Cast<UMovieScene3DTransformSection>(CamMoveTrack->CreateNewSection());
 			CamMoveSection->SetStartTime(startTime);
@@ -398,29 +451,63 @@ void FCustomRenderModule::CreateSequence()
 			CamMoveTrack->AddSection(*CamMoveSection);
 
 			// Add camera flying animation
-			double timeStepSize = 1.0 / 20.0;
+			double timeStepSize = 1.0 / settings["FPS"];
 			double camRadius = std::max(box.X, box.Y) * (isCustom ? settings[names[i] + "-R"] : settings["RadiusMultiplier"]);
 			FVector Zaxis(0, 0, 1.0);
 
+			// Fly around range
+			double startAngle = 0.0;
+			double endAngle = 360.0;
+
+			if (isCustom) {
+				startAngle = settings[names[i] + "-SA"];
+				endAngle = settings[names[i] + "-EA"];
+			}
+
+			double rangeAngle = endAngle - startAngle;
+
 			for (double time = 0; time <= 1.0; time += timeStepSize)
 			{
-				double theta = time * 360.0;
+				double theta = startAngle + (time * rangeAngle);
+
 				FVector pos = origin + FVector(0, 0, (isCustom ? settings[names[i] + "-CH"] : settings["CameraHeight"])) + FVector(camRadius, 0, 0).RotateAngleAxis(theta, Zaxis);
+
 				FTransformKey tx = FTransformKey(EKey3DTransformChannel::Translation, EAxis::X, pos.X, unwind);
 				FTransformKey ty = FTransformKey(EKey3DTransformChannel::Translation, EAxis::Y, pos.Y, unwind);
 				FTransformKey tz = FTransformKey(EKey3DTransformChannel::Translation, EAxis::Z, pos.Z, unwind);
 				CamMoveSection->AddKey(startTime + time, tx, KeyInterpolation);
 				CamMoveSection->AddKey(startTime + time, ty, KeyInterpolation);
 				CamMoveSection->AddKey(startTime + time, tz, KeyInterpolation);
+
+				// Set initial camera position for better preview
+				if (time == 0) camera->SetActorLocation(pos);
 			}
 
 			startTime += deltaTime;
 		}
+
+		// Show in viewport
+		{
+			for (int32 i = 0; i < GEditor->LevelViewportClients.Num(); ++i){
+				FLevelEditorViewportClient* LevelVC = GEditor->LevelViewportClients[i];
+				if (LevelVC && LevelVC->IsPerspective() && LevelVC->AllowsCinematicPreview() && LevelVC->GetViewMode() != VMI_Unknown){
+					LevelVC->SetActorLock(nullptr);
+					LevelVC->bLockedCameraView = false;
+					LevelVC->UpdateViewForLockedActor();
+					LevelVC->Invalidate();
+				}
+			}
+			Sequencer->SetPerspectiveViewportCameraCutEnabled(true);
+			Sequencer->ForceEvaluate();
+		}
 	};
+
+	if(CleanupPreviousSequence( )) return;
 
 	CreateSequence( settings );
 
-	FMessageDialog::Open(EAppMsgType::Ok, FText::FromString("All done"));
+
+	//FMessageDialog::Open(EAppMsgType::Ok, FText::FromString("All done"));
 }
 
 #undef LOCTEXT_NAMESPACE
