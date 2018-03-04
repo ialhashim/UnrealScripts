@@ -299,7 +299,7 @@ void FCustomRenderModule::CreateSequence()
 		for (auto actor : selectedActors)
 		{
 			auto actorLabel = actor->GetActorLabel();
-			auto cameraLabel = actorLabel + "_cam";
+			auto cameraLabel = actorLabel;
 
 			for (TActorIterator<ACineCameraActor> ActorItr(world); ActorItr; ++ActorItr) {
 				if (ActorItr->GetActorLabel().Equals(cameraLabel)){
@@ -344,7 +344,7 @@ void FCustomRenderModule::CreateSequence()
 
 			// Create camera
 			auto camera = world->SpawnActor<ACineCameraActor>(CamPos, CamRotation, CamSpawnInfo);
-			camera->SetActorLabel(actorLabel + "_cam");
+			camera->SetActorLabel(actorLabel);
 
 			// Camera settings
 			auto camSettings = camera->GetCineCameraComponent();
