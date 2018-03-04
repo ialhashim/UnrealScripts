@@ -9,6 +9,7 @@
 #include "LevelEditor.h"
 
 SWindow * pwindow = nullptr;
+TArray<AStaticMeshActor*> selectedActors;
 
 static const FName CustomRenderTabName("CustomRender");
 
@@ -121,7 +122,8 @@ TArray<AStaticMeshActor*> getSelectedActors() {
 
 void FCustomRenderModule::PluginButtonClicked()
 {
-	auto selectedActors = getSelectedActors();
+	selectedActors = getSelectedActors();
+
 	if (selectedActors.Num() == 0) {
 		FMessageDialog::Open(EAppMsgType::Ok, FText::FromString("No objects selected."));
 		return;
@@ -153,19 +155,31 @@ void FCustomRenderModule::PluginButtonClicked()
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(STextBlock).Text(FText::FromString("Camera Height:"))]
-		+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SSpinBox<float>).Tag("CameraHeight").MinValue(-10.0f).MaxValue(200.0f).Value(150.0f)]
+		+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SSpinBox<float>).Tag("CameraHeight").MinValue(0.0f).MaxValue(300.0f).Value(150.0f)]
 		]
 		+ SScrollBox::Slot().Padding(5)
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(STextBlock).Text(FText::FromString("Radius Multiplier:"))]
-			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SSpinBox<float>).Tag("RadiusMultiplier").MinValue(1.0f).MaxValue(10.0f).Value(3.0f)]
+			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SSpinBox<float>).Tag("RadiusMultiplier").MinValue(0).MaxValue(20.0f).Value(3.0f)]
+		]
+		+ SScrollBox::Slot().Padding(5)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(STextBlock).Text(FText::FromString("Start Angle:"))]
+			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SSpinBox<float>).Tag("StartAngle").MinValue(-360.0f).MaxValue(720.0f).Value(0.0f)]
+		]
+		+ SScrollBox::Slot().Padding(5)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(STextBlock).Text(FText::FromString("End Angle:"))]
+			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SSpinBox<float>).Tag("EndAngle").MinValue(-360.0f).MaxValue(720.0f).Value(180.0f)]
 		]
 		+ SScrollBox::Slot().Padding(5)
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(STextBlock).Text(FText::FromString("Lookat Height Adjust:"))]
-			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SSpinBox<float>).Tag("LookatHeightAdjust").MinValue(0.0f).MaxValue(5.0f).Value(0.5f)]
+			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SSpinBox<float>).Tag("LookatHeightAdjust").MinValue(-20.0f).MaxValue(20.0f).Value(0.5f)]
 		]
 		+ SScrollBox::Slot().Padding(5)
 		[
@@ -227,18 +241,18 @@ void FCustomRenderModule::PluginButtonClicked()
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SCheckBox).Tag(FName(*actorCheck))]
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.4f)[SNew(STextBlock).Text(actorLabelText)]
-			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorCH)).Value(150.0f).MinValue(-200).MaxValue(200)]
-			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorR)).Value(3.0f).MinValue(-200).MaxValue(200)]
-			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorLH)).Value(0.5f).MinValue(-200).MaxValue(200)]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorCH)).Value(150.0f).MinValue(0).MaxValue(300)]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorR)).Value(3.0f).MinValue(0).MaxValue(20)]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorLH)).Value(0.5f).MinValue(-20).MaxValue(20)]
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorSA)).Value(0.0f).MinValue(-360.0f).MaxValue(720)]
-			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorEA)).Value(360.0f).MinValue(-360.0f).MaxValue(720)]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorEA)).Value(180.0f).MinValue(-360.0f).MaxValue(720)]
 		];
 	}
 
 	// Settings window:
 	auto Window = SNew(SWindow)
 		.Title(FText::FromString(TEXT("Custom Render")))
-		.ClientSize(FVector2D(450, 520))
+		.ClientSize(FVector2D(450, 620))
 		.SupportsMaximize(true)
 		.SupportsMinimize(false)
 		.Content()[ParentBox];
@@ -280,7 +294,6 @@ void FCustomRenderModule::CreateSequence()
 	}
 
 	auto CleanupPreviousSequence = [=]() {
-		auto selectedActors = getSelectedActors();
 
 		TArray<UObject *> objects;
 
@@ -316,9 +329,6 @@ void FCustomRenderModule::CreateSequence()
 		std::vector<FVector> origins, boxes;
 		std::vector<std::string> names;
 
-		// Get the set of selected objects
-		auto selectedActors = getSelectedActors();
-		
 		// Generate a camera for each object in the selection
 		for (auto actor : selectedActors)
 		{
@@ -456,8 +466,8 @@ void FCustomRenderModule::CreateSequence()
 			FVector Zaxis(0, 0, 1.0);
 
 			// Fly around range
-			double startAngle = 0.0;
-			double endAngle = 360.0;
+			double startAngle = settings["StartAngle"];
+			double endAngle = settings["EndAngle"];
 
 			if (isCustom) {
 				startAngle = settings[names[i] + "-SA"];
@@ -470,7 +480,7 @@ void FCustomRenderModule::CreateSequence()
 			{
 				double theta = startAngle + (time * rangeAngle);
 
-				FVector pos = origin + FVector(0, 0, (isCustom ? settings[names[i] + "-CH"] : settings["CameraHeight"])) + FVector(camRadius, 0, 0).RotateAngleAxis(theta, Zaxis);
+				FVector pos = FVector(origin.X, origin.Y, 0) + FVector(0, 0, (isCustom ? settings[names[i] + "-CH"] : settings["CameraHeight"])) + FVector(camRadius, 0, 0).RotateAngleAxis(theta, Zaxis);
 
 				FTransformKey tx = FTransformKey(EKey3DTransformChannel::Translation, EAxis::X, pos.X, unwind);
 				FTransformKey ty = FTransformKey(EKey3DTransformChannel::Translation, EAxis::Y, pos.Y, unwind);
@@ -497,6 +507,7 @@ void FCustomRenderModule::CreateSequence()
 					LevelVC->Invalidate();
 				}
 			}
+			Sequencer->SetViewRange(TRange<float>(0, startTime + deltaTime), EViewRangeInterpolation::Immediate);
 			Sequencer->SetPerspectiveViewportCameraCutEnabled(true);
 			Sequencer->ForceEvaluate();
 		}
