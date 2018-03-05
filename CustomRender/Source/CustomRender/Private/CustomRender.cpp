@@ -10,6 +10,7 @@
 
 SWindow * pwindow = nullptr;
 TArray<AStaticMeshActor*> selectedActors;
+float lastTime = 0.0f;
 
 static const FName CustomRenderTabName("CustomRender");
 
@@ -241,9 +242,9 @@ void FCustomRenderModule::PluginButtonClicked()
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SCheckBox).Tag(FName(*actorCheck))]
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.4f)[SNew(STextBlock).Text(actorLabelText)]
-			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorCH)).Value(150.0f).MinValue(0).MaxValue(300)]
-			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorR)).Value(3.0f).MinValue(0).MaxValue(20)]
-			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorLH)).Value(0.5f).MinValue(-20).MaxValue(20)]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorCH)).Value(0).MinValue(-300).MaxValue(300)]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorR)).Value(1.0f).MinValue(0.0f).MaxValue(20.0f)]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorLH)).Value(1.0f).MinValue(-20).MaxValue(20)]
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorSA)).Value(0.0f).MinValue(-360.0f).MaxValue(720)]
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorEA)).Value(180.0f).MinValue(-360.0f).MaxValue(720)]
 		];
@@ -299,10 +300,20 @@ void FCustomRenderModule::CreateSequence()
 
 		// Clean up past sequences
 		{
+			// Get sequencer
 			FAssetRegistryModule& AssetRegistryModule = FModuleManager::GetModuleChecked<FAssetRegistryModule>("AssetRegistry");
-			FAssetData asset = AssetRegistryModule.Get().GetAssetByObjectPath(UTF8_TO_TCHAR("/Game/Cinematics/Sequences/Master"), true);
-			if (asset.IsValid()) {
-				objects.Add(asset.GetAsset());
+			FString AssetPath = "/Game/Cinematics/Sequences";
+			FString AssetName = "Master"; AssetPath /= AssetName; AssetPath += "." + AssetName;
+			FAssetData AssetData = AssetRegistryModule.Get().GetAssetByObjectPath(*AssetPath);
+
+			if (AssetData.IsValid())
+			{
+				auto MasterSequenceAsset = AssetData.GetAsset();
+				IAssetEditorInstance* AssetEditor = FAssetEditorManager::Get().FindEditorForAsset(MasterSequenceAsset, true);
+				FLevelSequenceEditorToolkit* LevelSequenceEditor = (FLevelSequenceEditorToolkit*)AssetEditor;
+				lastTime = LevelSequenceEditor->GetSequencer().Get()->GetGlobalTime();
+
+				objects.Add(MasterSequenceAsset);
 			}
 		}
 
@@ -373,7 +384,7 @@ void FCustomRenderModule::CreateSequence()
 
 			// Look at property
 			camera->LookatTrackingSettings.ActorToTrack = actor;
-			camera->LookatTrackingSettings.RelativeOffset = FVector(0, 0, box.Z * (isCustom ? MyLookatHeightAdjust : settings["LookatHeightAdjust"]));
+			camera->LookatTrackingSettings.RelativeOffset = FVector(0, 0, box.Z * (isCustom ? MyLookatHeightAdjust * settings["LookatHeightAdjust"] : settings["LookatHeightAdjust"]));
 			camera->LookatTrackingSettings.bEnableLookAtTracking = true;
 			camera->LookatTrackingSettings.bDrawDebugLookAtTrackingPosition = true;
 
@@ -462,7 +473,7 @@ void FCustomRenderModule::CreateSequence()
 
 			// Add camera flying animation
 			double timeStepSize = 1.0 / settings["FPS"];
-			double camRadius = std::max(box.X, box.Y) * (isCustom ? settings[names[i] + "-R"] : settings["RadiusMultiplier"]);
+			double camRadius = std::max(box.X, box.Y) * (isCustom ? settings[names[i] + "-R"] * settings["RadiusMultiplier"] : settings["RadiusMultiplier"]);
 			FVector Zaxis(0, 0, 1.0);
 
 			// Fly around range
@@ -480,7 +491,7 @@ void FCustomRenderModule::CreateSequence()
 			{
 				double theta = startAngle + (time * rangeAngle);
 
-				FVector pos = FVector(origin.X, origin.Y, 0) + FVector(0, 0, (isCustom ? settings[names[i] + "-CH"] : settings["CameraHeight"])) + FVector(camRadius, 0, 0).RotateAngleAxis(theta, Zaxis);
+				FVector pos = FVector(origin.X, origin.Y, 0) + FVector(0, 0, (isCustom ? settings[names[i] + "-CH"] + settings["CameraHeight"] : settings["CameraHeight"])) + FVector(camRadius, 0, 0).RotateAngleAxis(theta, Zaxis);
 
 				FTransformKey tx = FTransformKey(EKey3DTransformChannel::Translation, EAxis::X, pos.X, unwind);
 				FTransformKey ty = FTransformKey(EKey3DTransformChannel::Translation, EAxis::Y, pos.Y, unwind);
@@ -510,13 +521,12 @@ void FCustomRenderModule::CreateSequence()
 			Sequencer->SetViewRange(TRange<float>(0, startTime + deltaTime), EViewRangeInterpolation::Immediate);
 			Sequencer->SetPerspectiveViewportCameraCutEnabled(true);
 			Sequencer->ForceEvaluate();
+			Sequencer->SetGlobalTime(lastTime);
 		}
 	};
 
-	if(CleanupPreviousSequence( )) return;
-
+	CleanupPreviousSequence();
 	CreateSequence( settings );
-
 
 	//FMessageDialog::Open(EAppMsgType::Ok, FText::FromString("All done"));
 }
