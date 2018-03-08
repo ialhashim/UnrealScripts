@@ -9,7 +9,7 @@
 #include "LevelEditor.h"
 
 SWindow * pwindow = nullptr;
-TArray<AStaticMeshActor*> selectedActors;
+TArray<AActor*> selectedActors;
 float lastTime = 0.0f;
 
 static const FName CustomRenderTabName("CustomRender");
@@ -114,10 +114,10 @@ void allChildWidgets(std::vector<TSharedRef<SWidget>> & result, TSharedRef<SWidg
 	}
 }
 
-TArray<AStaticMeshActor*> getSelectedActors() {
-	TArray<AStaticMeshActor*> actorsArray;
+TArray<AActor*> getSelectedActors() {
+	TArray<AActor*> actorsArray;
 	USelection * selection = GEditor->GetSelectedActors();
-	selection->GetSelectedObjects<AStaticMeshActor>(actorsArray);
+	selection->GetSelectedObjects<AActor>(actorsArray);
 	return actorsArray;
 }
 
@@ -156,7 +156,7 @@ void FCustomRenderModule::PluginButtonClicked()
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(STextBlock).Text(FText::FromString("Camera Height:"))]
-		+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SSpinBox<float>).Tag("CameraHeight").MinValue(0.0f).MaxValue(300.0f).Value(150.0f)]
+		+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SSpinBox<float>).Tag("CameraHeight").MinValue(-1000.0f).MaxValue(1000.0f).Value(150.0f)]
 		]
 		+ SScrollBox::Slot().Padding(5)
 		[
