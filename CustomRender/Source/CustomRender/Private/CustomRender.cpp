@@ -130,8 +130,8 @@ void FCustomRenderModule::PluginButtonClicked()
 		return;
 	}
 
-	TSharedRef<SVerticalBox> ParentBox = SNew(SVerticalBox);
-	ParentBox->AddSlot().AutoHeight()
+	TSharedRef<SScrollBox> ParentBox = SNew(SScrollBox);
+	ParentBox->AddSlot()
 		[
 			SNew(SScrollBox)
 			+ SScrollBox::Slot().Padding(10)
@@ -204,7 +204,7 @@ void FCustomRenderModule::PluginButtonClicked()
 		]
 		];
 
-	ParentBox->AddSlot().AutoHeight()
+	ParentBox->AddSlot()
 	[
 		SNew(SScrollBox)
 		+ SScrollBox::Slot().Padding(10)
@@ -237,7 +237,7 @@ void FCustomRenderModule::PluginButtonClicked()
 		auto actorSA = FString(actorLabelString + "-SA");
 		auto actorEA = FString(actorLabelString + "-EA");
 		
-		ParentBox->AddSlot().AutoHeight()
+		ParentBox->AddSlot()
 		[
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SCheckBox).Tag(FName(*actorCheck))]
