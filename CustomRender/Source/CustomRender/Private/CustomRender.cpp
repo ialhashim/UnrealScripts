@@ -242,7 +242,7 @@ void FCustomRenderModule::PluginButtonClicked()
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SCheckBox).Tag(FName(*actorCheck))]
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.4f)[SNew(STextBlock).Text(actorLabelText)]
-			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorCH)).Value(0).MinValue(-300).MaxValue(300)]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorCH)).Value(0).MinValue(-1000).MaxValue(1000)]
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorR)).Value(1.0f).MinValue(0.0f).MaxValue(20.0f)]
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorLH)).Value(1.0f).MinValue(-20).MaxValue(20)]
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorSA)).Value(0.0f).MinValue(-360.0f).MaxValue(720)]
