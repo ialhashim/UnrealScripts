@@ -10,7 +10,6 @@
 
 SWindow * pwindow = nullptr;
 TArray<AActor*> selectedActors;
-float lastTime = 0.0f;
 
 static const FName CustomRenderTabName("CustomRender");
 
@@ -103,8 +102,13 @@ void FCustomRenderModule::AddToolbarExtension(FToolBarBuilder& Builder)
 #include <Tracks/MovieSceneCameraCutTrack.h>
 #include <Runtime/MovieScene/Public/MovieScene.h>
 #include <Runtime/MovieScene/Public/MovieSceneSection.h>
-#include <Runtime/MovieSceneTracks/Public/Sections/MovieSceneCameraCutSection.h>
+#include <Runtime/MovieScene/Public/Channels/MovieSceneFloatChannel.h>
+#include <Runtime/MovieScene/Public/Channels/MovieSceneChannelProxy.h>
 #include <Runtime/MovieSceneTracks/Public/Tracks/MovieScene3DTransformTrack.h>
+#include <Runtime/MovieSceneTracks/Public/Sections/MovieSceneCameraCutSection.h>
+#include <Runtime/MovieSceneTracks/Public/Sections/MovieScene3DTransformSection.h>
+
+FFrameTime lastTime(0);
 
 void allChildWidgets(std::vector<TSharedRef<SWidget>> & result, TSharedRef<SWidget> parent) {
 	for (int i = 0; i < parent->GetChildren()->Num(); i++) {
@@ -311,7 +315,7 @@ void FCustomRenderModule::CreateSequence()
 				auto MasterSequenceAsset = AssetData.GetAsset();
 				IAssetEditorInstance* AssetEditor = FAssetEditorManager::Get().FindEditorForAsset(MasterSequenceAsset, true);
 				FLevelSequenceEditorToolkit* LevelSequenceEditor = (FLevelSequenceEditorToolkit*)AssetEditor;
-				lastTime = LevelSequenceEditor->GetSequencer().Get()->GetGlobalTime();
+				lastTime = LevelSequenceEditor->GetSequencer().Get()->GetGlobalTime().Time;
 
 				objects.Add(MasterSequenceAsset);
 			}
@@ -424,15 +428,17 @@ void FCustomRenderModule::CreateSequence()
 		auto seq = Sequencer->GetRootMovieSceneSequence();
 		auto scene = seq->GetMovieScene();
 
-		// One second for each camera
-		scene->SetPlaybackRange(0, allcams.size());
+		FFrameRate FrameResolution = seq->GetMovieScene()->GetFrameResolution();
+
+		// Create camera cut sections
+		int startTime = FrameResolution.AsFrameNumber(0.0).Value;
+		int deltaTime = FrameResolution.AsFrameNumber(1.0).Value;
+
+	    // One second for each camera
+		scene->SetPlaybackRange(TRange<FFrameNumber>(startTime, int(deltaTime * allcams.size())));
 
 		// Create camera cut track
 		UMovieSceneCameraCutTrack *CameraCutTrack = (UMovieSceneCameraCutTrack*)scene->AddCameraCutTrack(UMovieSceneCameraCutTrack::StaticClass());
-
-		// Create camera cut sections
-		float startTime = 0;
-		float deltaTime = 1.0; // seconds
 
 		// Animation key interpolation type
 		EMovieSceneKeyInterpolation KeyInterpolation = EMovieSceneKeyInterpolation::Auto;
@@ -446,33 +452,28 @@ void FCustomRenderModule::CreateSequence()
 			auto & box = boxes[i];
 			auto & origin = origins[i];
 
+			auto SectionTimeRange = TRange<FFrameNumber>::Inclusive(
+				startTime + ((i == 0) ? -deltaTime : 0 ), 
+				startTime + deltaTime +((i == allcams.size() - 1) ? deltaTime : 0));
+
 			// Get camera FGuid
-			UMovieSceneCameraCutSection *new_section = (UMovieSceneCameraCutSection*)CameraCutTrack->CreateNewSection();
 			FGuid CameraGuid = scene->AddPossessable(camera->GetActorLabel(), camera->GetClass());
 			seq->BindPossessableObject(CameraGuid, *camera, camera->GetWorld());
-
-			// Bleed into start and end to avoid jarring frames at start or end
-			float delta = 1.0, deltaStart = 0, deltaEnd = 0;
-			if (i == 0) deltaStart = -delta;
-			else if (i == allcams.size() - 1) deltaEnd = delta;
 
 			// Create camera cut section
 			CameraCutTrack->Modify();
 			auto CamCutNewSection = Cast<UMovieSceneCameraCutSection>(CameraCutTrack->CreateNewSection());
-			CamCutNewSection->SetStartTime(startTime + deltaStart);
-			CamCutNewSection->SetEndTime(startTime + deltaTime + deltaEnd);
 			CamCutNewSection->SetCameraGuid(CameraGuid);
+			CamCutNewSection->SetRange(SectionTimeRange);
 			CameraCutTrack->AddSection(*CamCutNewSection);
 
-			// Create camera motion section
-			auto CamMoveTrack = scene->AddTrack(UMovieScene3DTransformTrack::StaticClass(), CameraGuid);
-			auto CamMoveSection = Cast<UMovieScene3DTransformSection>(CamMoveTrack->CreateNewSection());
-			CamMoveSection->SetStartTime(startTime);
-			CamMoveSection->SetEndTime(startTime + deltaTime);
+			// Create new transform track and section
+			auto CamMoveTrack = Cast<UMovieScene3DTransformTrack>(scene->AddTrack(UMovieScene3DTransformTrack::StaticClass(), CameraGuid));
+			auto CamMoveSection = CastChecked<UMovieScene3DTransformSection>(CamMoveTrack->CreateNewSection());
 			CamMoveTrack->AddSection(*CamMoveSection);
+			CamMoveSection->SetRange(TRange<FFrameNumber>::All());
 
-			// Add camera flying animation
-			double timeStepSize = 1.0 / settings["FPS"];
+			/// Add camera flying animation:
 			double camRadius = std::max(box.X, box.Y) * (isCustom ? settings[names[i] + "-R"] * settings["RadiusMultiplier"] : settings["RadiusMultiplier"]);
 			FVector Zaxis(0, 0, 1.0);
 
@@ -487,19 +488,24 @@ void FCustomRenderModule::CreateSequence()
 
 			double rangeAngle = endAngle - startAngle;
 
-			for (double time = 0; time <= 1.0; time += timeStepSize)
+			int fps = int(settings["FPS"]);
+
+			for (int time = 0; time < fps; time++)
 			{
-				double theta = startAngle + (time * rangeAngle);
+				double t = double(time) / double(fps-1);
+				double theta = startAngle + (t * rangeAngle);
 
-				FVector pos = FVector(origin.X, origin.Y, 0) + FVector(0, 0, (isCustom ? settings[names[i] + "-CH"] + settings["CameraHeight"] : settings["CameraHeight"])) + FVector(camRadius, 0, 0).RotateAngleAxis(theta, Zaxis);
+				FVector pos = FVector(origin.X, origin.Y, 0) 
+					+ FVector(0, 0, (isCustom ? settings[names[i] + "-CH"] + settings["CameraHeight"] : settings["CameraHeight"])) 
+					+ FVector(camRadius, 0, 0).RotateAngleAxis(theta, Zaxis);
 
-				FTransformKey tx = FTransformKey(EKey3DTransformChannel::Translation, EAxis::X, pos.X, unwind);
-				FTransformKey ty = FTransformKey(EKey3DTransformChannel::Translation, EAxis::Y, pos.Y, unwind);
-				FTransformKey tz = FTransformKey(EKey3DTransformChannel::Translation, EAxis::Z, pos.Z, unwind);
-				CamMoveSection->AddKey(startTime + time, tx, KeyInterpolation);
-				CamMoveSection->AddKey(startTime + time, ty, KeyInterpolation);
-				CamMoveSection->AddKey(startTime + time, tz, KeyInterpolation);
+				FFrameNumber KeyTime = startTime + int(t * deltaTime);
 
+				auto FloatChannels = CamMoveSection->GetChannelProxy().GetChannels<FMovieSceneFloatChannel>();
+				FloatChannels[0]->AddCubicKey(KeyTime, pos.X);
+				FloatChannels[1]->AddCubicKey(KeyTime, pos.Y);
+				FloatChannels[2]->AddCubicKey(KeyTime, pos.Z);
+				
 				// Set initial camera position for better preview
 				if (time == 0) camera->SetActorLocation(pos);
 			}
@@ -507,7 +513,7 @@ void FCustomRenderModule::CreateSequence()
 			startTime += deltaTime;
 		}
 
-		// Show in viewport
+		// Update viewport
 		{
 			for (int32 i = 0; i < GEditor->LevelViewportClients.Num(); ++i){
 				FLevelEditorViewportClient* LevelVC = GEditor->LevelViewportClients[i];
@@ -518,7 +524,7 @@ void FCustomRenderModule::CreateSequence()
 					LevelVC->Invalidate();
 				}
 			}
-			Sequencer->SetViewRange(TRange<float>(0, startTime + deltaTime), EViewRangeInterpolation::Immediate);
+			Sequencer->SetViewRange(TRange<double>(-0.25, allcams.size() + 0.25), EViewRangeInterpolation::Immediate);
 			Sequencer->SetPerspectiveViewportCameraCutEnabled(true);
 			Sequencer->ForceEvaluate();
 			Sequencer->SetGlobalTime(lastTime);
