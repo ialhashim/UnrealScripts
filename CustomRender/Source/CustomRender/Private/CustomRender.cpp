@@ -190,6 +190,18 @@ void FCustomRenderModule::PluginButtonClicked()
 			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(STextBlock).Text(FText::FromString("FPS:"))]
 			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SSpinBox<float>).Tag("FPS").MinValue(1.0f).MaxValue(512.0f).Value(30.0f)]
 		]
+		+ SScrollBox::Slot().Padding(5)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(STextBlock).Text(FText::FromString("Fix Pivot:"))]
+			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SCheckBox).Tag("FixPivot")]
+		]
+		+ SScrollBox::Slot().Padding(5)
+		[
+			SNew(SHorizontalBox)
+			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(STextBlock).Text(FText::FromString("Center Pivot:"))]
+			+ SHorizontalBox::Slot().FillWidth(0.5f)[SNew(SCheckBox).Tag("CenterPivot")]
+		]
 		+ SScrollBox::Slot().Padding(10)
 		[
 			SNew(SHorizontalBox)
@@ -224,6 +236,8 @@ void FCustomRenderModule::PluginButtonClicked()
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f).HAlign(HAlign_Center)[SNew(STextBlock).Text(FText::FromString("LH"))]
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f).HAlign(HAlign_Center)[SNew(STextBlock).Text(FText::FromString("SA"))]
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f).HAlign(HAlign_Center)[SNew(STextBlock).Text(FText::FromString("EA"))]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f).HAlign(HAlign_Center)[SNew(STextBlock).Text(FText::FromString("FP"))]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f).HAlign(HAlign_Center)[SNew(STextBlock).Text(FText::FromString("CP"))]
 		]
 	];
 
@@ -238,6 +252,8 @@ void FCustomRenderModule::PluginButtonClicked()
 		auto actorLH = FString(actorLabelString + "-LH");
 		auto actorSA = FString(actorLabelString + "-SA");
 		auto actorEA = FString(actorLabelString + "-EA");
+		auto actorFP = FString(actorLabelString + "-FP");
+		auto actorCP = FString(actorLabelString + "-CP");
 		
 		ParentBox->AddSlot()
 		[
@@ -249,6 +265,8 @@ void FCustomRenderModule::PluginButtonClicked()
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorLH)).Value(1.0f).MinValue(-20).MaxValue(20)]
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorSA)).Value(0.0f).MinValue(-360.0f).MaxValue(720)]
 			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SSpinBox<float>).Tag(FName(*actorEA)).Value(180.0f).MinValue(-360.0f).MaxValue(720)]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SCheckBox).Tag(FName(*actorFP))]
+			+ SHorizontalBox::Slot().Padding(2).FillWidth(0.1f)[SNew(SCheckBox).Tag(FName(*actorCP))]
 		];
 	}
 
@@ -347,18 +365,30 @@ void FCustomRenderModule::CreateSequence()
 		{
 			auto actorLabel = actor->GetActorLabel();
 
+			// Per object settings
+			bool isCustom = settings[std::string(TCHAR_TO_UTF8(*actorLabel)) + "-isEnabled"] != 0.0f;
+			float MyLookatHeightAdjust = settings[std::string(TCHAR_TO_UTF8(*actorLabel)) + "-LH"];
+			bool isCustomFP = settings[std::string(TCHAR_TO_UTF8(*actorLabel)) + "-FP"] != 0.0f;
+			bool isCustomCP = settings[std::string(TCHAR_TO_UTF8(*actorLabel)) + "-CP"] != 0.0f;
+
 			// Actor properties
-			FVector origin, box;
+			FVector origin, box, delta(0,0,0);
 			actor->GetActorBounds(false, origin, box);
+
+			// Fix pivot option is selected
+			if (settings["FixPivot"] != 0.0f || isCustomFP) {
+				origin = actor->GetComponentsBoundingBox().GetCenter();
+			}
+			if (settings["CenterPivot"] != 0.0f || isCustomCP) {
+				auto center = actor->GetComponentsBoundingBox().GetCenter();
+				delta = center - origin;
+				origin += delta;
+			}
 
 			// Keep records
 			origins.push_back(origin);
 			boxes.push_back(box);
 			names.push_back(TCHAR_TO_UTF8(*actorLabel));
-
-			// Per object settings
-			bool isCustom = settings[std::string(TCHAR_TO_UTF8(*actorLabel)) + "-isEnabled"] != 0.0f;
-			float MyLookatHeightAdjust = settings[std::string(TCHAR_TO_UTF8(*actorLabel)) + "-LH"];
 
 			// Position camera:
 			FActorSpawnParameters CamSpawnInfo;
@@ -386,7 +416,10 @@ void FCustomRenderModule::CreateSequence()
 
 			// Look at property
 			camera->LookatTrackingSettings.ActorToTrack = actor;
-			camera->LookatTrackingSettings.RelativeOffset = FVector(0, 0, box.Z * (isCustom ? MyLookatHeightAdjust * settings["LookatHeightAdjust"] : settings["LookatHeightAdjust"]));
+			camera->LookatTrackingSettings.RelativeOffset = FVector(
+				settings["FixPivot"] != 0.0f || isCustomFP ? origin.X : 0, 
+				settings["FixPivot"] != 0.0f || isCustomFP ? origin.Y : 0,
+				box.Z * (isCustom ? MyLookatHeightAdjust * settings["LookatHeightAdjust"] : settings["LookatHeightAdjust"]));
 			camera->LookatTrackingSettings.bEnableLookAtTracking = true;
 			camera->LookatTrackingSettings.bDrawDebugLookAtTrackingPosition = true;
 
